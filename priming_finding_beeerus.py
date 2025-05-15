@@ -38,7 +38,7 @@ def resize_image(img, ref):
     return img.resize((new_w, new_h))
     
     
-def place_obj (obj, bg, location="anywhere", seed=None, resize_percent=0.1):
+def place_obj (obj, bg, location="anywhere", seed=None, resize_percent=0.05):
     ''' This fucntion resizes an object image and places it in a random location (see location arg) on a background image.
         This function assumes that the images are read by Image.open() method from the pillow library
         arguments:
@@ -51,7 +51,7 @@ def place_obj (obj, bg, location="anywhere", seed=None, resize_percent=0.1):
                 "up_left" for random placement in the up_left quarter of the image.
                 "anywhere" for random placement anywhere on the image.
             seed: use in case you want to set a seed for randomization.
-            resize_percent: how much should the object image be resized relative to the background image; defualt is 0.1 which hides the object; usee 0.2 to make when testing to make it easier to find the object.
+            resize_percent: how much should the object image be resized relative to the background image; defualt is 0.05 which hides the object; usee 0.2 to make when testing to make it easier to find the object.
         returns:
             bg: the background image with the object placed on int
             (x,y): the coordinates of where the obbject is placed
@@ -66,7 +66,6 @@ def place_obj (obj, bg, location="anywhere", seed=None, resize_percent=0.1):
     obj_h = int(obj_w * orig_h / orig_w) # maintain aspect ratio
     #Resize explicitly (returns a new Image) :contentReference[oaicite:1]{index=1}
     obj_resized = obj.resize((obj_w, obj_h))
-
     # defining our direction (possible locations) dictionary
     # the main idea heree is that images usualy start indexing at (0,0) on the left upper corner of the images
     # so our full range is from 0 to bg_w for the x and from 0 to bg_h for the y
@@ -74,10 +73,10 @@ def place_obj (obj, bg, location="anywhere", seed=None, resize_percent=0.1):
     # each direction indicates a quarter of the image and thus we can constrain our random selection of the location to a specific quarter by introducing the center coordinates
     # i.e. left: x goes from the center to the end, while right: goes from zero to the center
     W, H = (bg_w - obj_w, bg_h - obj_h)
-    directions = {  "down_right"   : [[bg_cx, W], [bg_cy, H]],
-                    "down_left"    : [[0, W - bg_cx], [bg_cy, H]],
-                    "up_right"     : [[bg_cx, W], [0, H - bg_cy]],
-                    "up_left"      : [[0, W - bg_cx], [0, H - bg_cy]],
+    directions = {  "right_down"   : [[bg_cx, W], [bg_cy, H]],
+                    "left_down"    : [[0, W - bg_cx], [bg_cy, H]],
+                    "right_up"     : [[bg_cx, W], [0, H - bg_cy]],
+                    "left_up"      : [[0, W - bg_cx], [0, H - bg_cy]],
                     "anywhere"     : [[0, W], [0, H]]
                     }
     loc = location
@@ -87,24 +86,25 @@ def place_obj (obj, bg, location="anywhere", seed=None, resize_percent=0.1):
     new_bg = copy.deepcopy(bg)
     new_bg.paste(obj_resized, (x, y), mask=obj_resized)
     #bg.save('trial_image.png')
-    return new_bg, (x,y)
+    return new_bg
 
 def test_place_obj (pic_id=0, seed=None, percent=0.1):
-    win_x, win_y = 1200, 800
-    win = visual.Window([win_x, win_y], color='white')
+    #mon = monitors.Monitor('myMonitor')
+    #mon.setDistance(100)
+    win_x, win_y = 1440, 900
+    win = visual.Window([win_x, win_y])#, monitor = mon, waitBlanking=True, checkTiming=True, color='black')
     # load images
     loaded_imgs = load_images(win_x)
     obj = loaded_imgs["object"]
     bg = loaded_imgs["backgrounds"][pic_id]
     directions = ["down_right","down_left", "up_right", "up_left", "anywhere"]
     for i,s in enumerate(directions):
-        img, coordinates = place_obj(obj, bg, location=s ,seed=seed, resize_percent=percent)
-        print(coordinates)
+        img= place_obj(obj, bg, location=s ,seed=seed, resize_percent=percent)
         create_task_comp(win, img, Mode='keypress')
     win.close()
     core.quit()
 
-def create_task_comp (window, img, Mode="time",time=0.1):
+def create_task_comp (window, img, Mode="keypress",time=0.1):
     '''
     one task consists of 4 main components: 1.fixation cross -> 2. leff/right arrows -> 3. up/down arrows -> 4. background with object to find placed accordingly
     this function helps with creating one specific component (slide)
@@ -129,7 +129,6 @@ def create_task_comp (window, img, Mode="time",time=0.1):
         event.waitKeys(maxWait=30, keyList='space')
     elif Mode=='time':
         core.wait(time)
-    
     
 def test_images():
     '''function to test image loading and window preview'''
@@ -165,28 +164,53 @@ def task_design(seed=None):
     returns:
         returns bg_indx, a tuple of chosen primes and a string for the location of the object dependeg if it is congruent or not
     '''
-    if seed!=None: random.seed(seed)
+    if seed!=None: 
+        random.seed(seed)
     # randomly select a background
     bg_idx = random.randint(0,7)
     # randomly select a direction
-    primes = [("down", "right"),("down", "left"), ("up", "left"), ("up", "right")]
+    primes = [("left", "up"), ("left", "down"), ("right", "up"), ("right", "down")]
     primes_idx = random.randint(0,3)
-    # randomly select congruencey
-    iscong = bool(random.randint(0,1))
-    if iscong:
-        location = primes[primes_idx][0] + "_" + primes[primes_idx][1]
-    else:
-        location = primes[primes_idx+2][0] + "_" + primes[primes_idx+2][1]
-    return bg_idx, primes[primes_idx], location
+    prime_lr, prime_ud = primes[primes_idx]
     
+    # randomly select congruencey
+    iscong = random.choice([True, False])
+    direction_map = {"left": "right", "right": "left", "up": "down", "down": "up"}
+    if iscong:
+        location = f"{prime_lr}_{prime_ud}"
+    else:
+        inv_lr = direction_map[prime_lr]
+        inv_ud = direction_map[prime_ud]
+        location = f"{inv_lr}_{inv_ud}"
+        
+    return bg_idx, (prime_lr, prime_ud), location
+
 
 def main(num_tasks=10):
     win_x, win_y = 1440, 900
-    win = visual.Window([win_x, win_y], color='black')
     # load images
     loaded_imgs = load_images(win_x)
     obj = loaded_imgs["object"]
     cross = loaded_imgs["cross"]
+    
+    count = 0
+    bg_obj = [None] * num_tasks
+    LR = [None] * num_tasks
+    UD = [None] * num_tasks
+    print("Setting up experiment ...")
+    for n in range(num_tasks):
+        bg_idx, primes, location = task_design()
+        background = loaded_imgs['backgrounds'][bg_idx]
+        prime_lr, prime_ud = primes
+        LR[n] = loaded_imgs[prime_lr]  # e.g., "left" or "right"
+        UD[n] = loaded_imgs[prime_ud]  # e.g., "up" or "down"
+        # Place object on the background
+        bg_obj[n] = place_obj(obj, background, location=location)
+    print("Experiment is set up")
+    
+    
+    win = visual.Window([win_x, win_y], color='black')
+    
     #Welcome message
     Welcome = '''
     Welcome to the priming task!
@@ -221,24 +245,12 @@ def main(num_tasks=10):
     win.flip()
     event.waitKeys(keyList='space')
     
-    count = 0
-    for n in range(num_tasks):
-        # randomise design and extract chosen images
-        bg_idx, primes, location = task_design()
-        bg = loaded_imgs['backgrounds'][bg_idx]
-        LR = loaded_imgs[primes[0]]
-        UD = loaded_imgs[primes[1]]
-        bg_obj = place_obj(obj, bg, location=loc)
-        
+    for n in range (num_tasks):   
         # present each image accordingly
         create_task_comp(win, cross, Mode="time", time=0.5)
-        create_task_comp(win, LR, Mode="time", time=0.1)
-        create_task_comp(win, UD, Mode="time", time=0.1)
-        create_task_comp(win, bg_obj, Mode="keypress")
-        
-        #count+1 if space is pressed
-        if event.getKeys(): count+=1
-    print(count)
+        create_task_comp(win, LR[n], Mode="time", time=0.1)
+        create_task_comp(win, UD[n], Mode="time", time=0.1)
+        create_task_comp(win, bg_obj[n], Mode="keypress")
         
         
 if __name__ == "__main__":
@@ -247,14 +259,12 @@ if __name__ == "__main__":
     ###### Enable secure coding by implementing NSApplicationDelegate. #######################
     ###### applicationSupportsSecureRestorableState: and returning YES.#######################
     ###### unless it gives you thee same error you do not have to uncommeent the following. ##
-    import os
-    import sys
+    #import os
+    #import sys
     # Redirect stderr to /dev/null to suppress macOS specific warnings
-    sys.stderr = open(os.devnull, 'w')
+    #sys.stderr = open(os.devnull, 'w')
+    #os.environ['PSYCHOPY_ALLOW_INSECURE'] = '1'
     ############################################################################################
-    from psychopy import monitors
-    #monitors.Monitor_loadAll()
-    #mon.save()
     
     
     main()
@@ -262,5 +272,6 @@ if __name__ == "__main__":
     
     ###uncomment to test random placement of object; choose a number from 0 to 7 to test different backgrounds###
     #test_place_obj (pic_id=6, seed=None, percent=0.08)
+    
     ###uncomment to test images###
     #test_images()
